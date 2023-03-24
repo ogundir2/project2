@@ -4,8 +4,6 @@
 #include <semaphore.h>
 #include <pthread.h>
 
-#define MAX 10
-#define UPPER 100000
 #define N 4
 
 struct idList
@@ -17,8 +15,7 @@ struct idList
 int numbers[N][N];     // 2D array of integers
 sem_t mysemaphores[N]; // Global semaphores
 
-// Bubble sort a 1D array
-void bubble_sort(int *arr, bool ascending)
+void bubble_sort(int *arr, int ascending)
 {
     int num, next, i, j;
 
@@ -28,7 +25,7 @@ void bubble_sort(int *arr, bool ascending)
         {
             num = arr[j];
             next = arr[j + 1];
-            if (ascending == true ? num > next : num < next)
+            if (ascending ? num > next : num < next)
             {
                 arr[j] = next;
                 arr[j + 1] = num;
@@ -47,12 +44,12 @@ void *shear_sort(void *param)
     // For each phase
     for (p = 0; p < 2 * N; p++)
     {
-        sem_wait(&semaphores[id]);
+        sem_wait(&mysemaphores[id]);
 
         if (p % 2 == 0)
         {
             // Sort a row
-            bubble_sort(numbers[id], id % 2 == 0 ? true : false);
+            bubble_sort(numbers[id], id % 2 == 0);
         }
         else
         {
@@ -62,14 +59,14 @@ void *shear_sort(void *param)
             {
                 col[i] = numbers[i][id];
             }
-            bubble_sort(col, true);
+            bubble_sort(col, 1);
             for (int i = 0; i < N; ++i)
             {
                 numbers[i][id] = col[i];
             }
         }
 
-        sem_post(&semaphores[(id + 1) % N]);
+        sem_post(&mysemaphores[(id + 1) % N]);
     }
 
     pthread_exit(NULL);
@@ -121,7 +118,7 @@ int main()
     struct idList *root; // Points to a linked list of thread IDs
     struct idList *currNode, *temp;
 
-    // Create n identical threads
+    // Create N identical threads
     for (i = 0; i < N; i++)
     {
         param = (int *)malloc(sizeof(int)); /* each thread requires a */
@@ -152,16 +149,16 @@ int main()
     currNode = root;
     /* Wait for all the threads to exit */
 
-    for (i = 0; i < n; i++)
+    for (i = 0; i < N; i++)
     {
-        printf("\n Joining thread: %d", currNode->thID);
+        printf("\nJoining thread: %d", currNode->thID);
         pthread_join(currNode->thID, NULL);
 
         currNode = currNode->next;
     }
 
     // Print the sorted array
-    printf("Sorted Array:\n");
+    printf("\n\nSorted Array:\n");
     for (i = 0; i < N; i++)
     {
         for (j = 0; j < N; j++)
