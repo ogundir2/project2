@@ -1,85 +1,71 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
+#include <unistd.h>
 #include <semaphore.h>
+#include <pthread.h>
 
+#define MAX 10
+#define UPPER 100000
 #define N 4
 
-// Global variables
-int array[N][N];
-sem_t semaphores[N];
-pthread_t threads[N];
-
-// Function to read input and store it in the 2D array
-void read_input()
+struct idList
 {
-    printf("Enter %d integers: \n", N * N);
-    for (int i = 0; i < N; ++i)
-    {
-        for (int j = 0; j < N; ++j)
-        {
-            scanf("%d", &array[i][j]);
-        }
-    }
-}
+    pthread_t thID;
+    struct idList *next;
+};
 
-// Function to print the array
-void print_array()
-{
-    printf("\n");
-    for (int i = 0; i < N; ++i)
-    {
-        for (int j = 0; j < N; ++j)
-        {
-            printf("%d ", array[i][j]);
-        }
-        printf("\n");
-    }
-    printf("\n");
-}
+int numbers[N][N];     // 2D array of integers
+sem_t mysemaphores[N]; // Global semaphores
 
-// Function to perform Bubblesort
-void bubblesort(int *arr, int len, int ascending)
+// Bubble sort a 1D array
+void bubble_sort(int *arr, bool ascending)
 {
-    for (int i = 0; i < len - 1; ++i)
+    int num, next, i, j;
+
+    for (i = 0; i < N; i++)
     {
-        for (int j = 0; j < len - 1 - i; ++j)
+        for (j = 0; j < N - i - 1; j++)
         {
-            if (ascending ? arr[j] > arr[j + 1] : arr[j] < arr[j + 1])
+            num = arr[j];
+            next = arr[j + 1];
+            if (ascending == true ? num > next : num < next)
             {
-                int temp = arr[j];
-                arr[j] = arr[j + 1];
-                arr[j + 1] = temp;
+                arr[j] = next;
+                arr[j + 1] = num;
             }
         }
     }
 }
 
-// Function to perform Shearsort
-void *shearsort(void *arg)
+// Shear sort a 2D array
+void *shear_sort(void *param)
 {
-    int id = *(int *)arg;
-    free(arg);
+    int p;
+    int id = *(int *)param;
+    free(param);
 
-    for (int phase = 0; phase < 2 * N; ++phase)
+    // For each phase
+    for (p = 0; p < 2 * N; p++)
     {
         sem_wait(&semaphores[id]);
 
-        if (phase % 2 == 0)
-        { // Sort row
-            bubblesort(array[id], N, id % 2 == 0);
+        if (p % 2 == 0)
+        {
+            // Sort a row
+            bubble_sort(numbers[id], id % 2 == 0 ? true : false);
         }
         else
-        { // Sort column
+        {
+            // Sort a column
             int col[N];
             for (int i = 0; i < N; ++i)
             {
-                col[i] = array[i][id];
+                col[i] = numbers[i][id];
             }
-            bubblesort(col, N, 1);
+            bubble_sort(col, true);
             for (int i = 0; i < N; ++i)
             {
-                array[i][id] = col[i];
+                numbers[i][id] = col[i];
             }
         }
 
@@ -91,34 +77,99 @@ void *shearsort(void *arg)
 
 int main()
 {
-    read_input();
-    printf("Initial array:\n");
-    print_array();
+    int i, j;
+    int *param;
 
-    for (int i = 0; i < N; ++i)
+    // Read integers into a 2D array
+    for (i = 0; i < N; i++)
     {
-        sem_init(&semaphores[i], 0, i == 0 ? 1 : 0);
+        for (j = 0; j < N; j++)
+        {
+            if (scanf("%d", &numbers[i][j]) != 1)
+            {
+                printf("\nCould not read integer.\n");
+                return 1;
+            }
+        }
     }
 
-    for (int i = 0; i < N; ++i)
+    // Print the original array
+    printf("Original Array:\n");
+    for (i = 0; i < N; i++)
     {
-        int *arg = (int *)malloc(sizeof(int));
-        *arg = i;
-        pthread_create(&threads[i], NULL, shearsort, arg);
+        for (j = 0; j < N; j++)
+        {
+            printf("%d ", numbers[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+
+    pthread_t *threadID; // The ID of the newly created thread
+
+    for (i = 0; i < N; i++)
+    {
+        int value = 0;
+        if (i == 0)
+        {
+            value = 1;
+        }
+
+        sem_init(&mysemaphores[i], 0, value);
     }
 
-    for (int i = 0; i < N; ++i)
+    struct idList *root; // Points to a linked list of thread IDs
+    struct idList *currNode, *temp;
+
+    // Create n identical threads
+    for (i = 0; i < N; i++)
     {
-        pthread_join(threads[i], NULL);
+        param = (int *)malloc(sizeof(int)); /* each thread requires a */
+        *param = i;                         /* SEPARATE copy of its parameter */
+
+        temp = (struct idList *)malloc(sizeof(struct idList)); // Allocate some memory for a new node
+        if (!i)
+        {
+            root = temp;
+            currNode = temp;
+        } // initialize the root of the linked list
+
+        threadID = (pthread_t *)malloc(sizeof(pthread_t));
+
+        int thCrEr = pthread_create(threadID, NULL, shear_sort, param);
+
+        if (thCrEr)
+            printf("Error in creating a new thread!!!");
+
+        temp->thID = *threadID;
+        temp->next = NULL;
+        currNode->next = temp;
+        currNode = temp;
+
+        printf("A new thread created with ID %d \n", *threadID);
     }
 
-    printf("Sorted array:\n");
-    print_array();
+    currNode = root;
+    /* Wait for all the threads to exit */
 
-    for (int i = 0; i < N; ++i)
+    for (i = 0; i < n; i++)
     {
-        sem_destroy(&semaphores[i]);
+        printf("\n Joining thread: %d", currNode->thID);
+        pthread_join(currNode->thID, NULL);
+
+        currNode = currNode->next;
     }
 
-    return 0;
+    // Print the sorted array
+    printf("Sorted Array:\n");
+    for (i = 0; i < N; i++)
+    {
+        for (j = 0; j < N; j++)
+        {
+            printf("%d ", numbers[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+    exit(0);
 }

@@ -1,84 +1,124 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <semaphore.h>
 #include <pthread.h>
+#include <semaphore.h>
 
-#define MAX 10
-#define UPPER 100000
-#define ROWS 4
-#define COLS 4
+#define N 4
 
-struct idList
+// Global variables
+int array[N][N];
+sem_t semaphores[N];
+pthread_t threads[N];
+
+// Function to read input and store it in the 2D array
+void read_input()
 {
-    pthread_t thID;
-    struct idList *next;
-};
-
-long counter = 0;  /* variable to be incremented by each thread */
-sem_t mysemaphore; /* global semaphore */
-
-/* This function specifies the body of each thread */
-
-void *some_thread(void *param) /* routine should do counter += UPPER */
-{                              /* if the semaphores work! */
-    int j, temp;
-    int id = *(int *)param;
-
-    free(param);
-    for (j = 0; j < UPPER; j++)
+    printf("Enter %d integers: \n", N * N);
+    for (int i = 0; i < N; ++i)
     {
-
-        //    sem_wait( &mysemaphore );  	/*  semaphore WAIT operation */
-        // The wait systems call waits on mysemaphore until it becomes non-zero.
-        // Then, it atomically decreases mysemaphore.
-        temp = 2 * counter; // Start of the critical section
-        temp = temp + 2;
-        counter = temp / 2;
-        // 	sem_post( &mysemaphore );   	/*  semaphore SIGNAL operation */
+        for (int j = 0; j < N; ++j)
+        {
+            scanf("%d", &array[i][j]);
+        }
     }
+}
+
+// Function to print the array
+void print_array()
+{
+    printf("\n");
+    for (int i = 0; i < N; ++i)
+    {
+        for (int j = 0; j < N; ++j)
+        {
+            printf("%d ", array[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
+// Function to perform Bubblesort
+void bubblesort(int *arr, int len, int ascending)
+{
+    for (int i = 0; i < len - 1; ++i)
+    {
+        for (int j = 0; j < len - 1 - i; ++j)
+        {
+            if (ascending ? arr[j] > arr[j + 1] : arr[j] < arr[j + 1])
+            {
+                int temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+}
+
+// Function to perform Shearsort
+void *shearsort(void *arg)
+{
+    int id = *(int *)arg;
+    free(arg);
+
+    for (int phase = 0; phase < 2 * N; ++phase)
+    {
+        sem_wait(&semaphores[id]);
+
+        if (phase % 2 == 0)
+        { // Sort row
+            bubblesort(array[id], N, id % 2 == 0);
+        }
+        else
+        { // Sort column
+            int col[N];
+            for (int i = 0; i < N; ++i)
+            {
+                col[i] = array[i][id];
+            }
+            bubblesort(col, N, 1);
+            for (int i = 0; i < N; ++i)
+            {
+                array[i][id] = col[i];
+            }
+        }
+
+        sem_post(&semaphores[(id + 1) % N]);
+    }
+
     pthread_exit(NULL);
 }
 
 int main()
 {
-    int numbers[ROWS][COLS];
+    read_input();
+    printf("Initial array:\n");
+    print_array();
 
-    int x, y;
-
-    // Read integers into a 2D array
-    for (x = 0; x < ROWS; x++)
+    for (int i = 0; i < N; ++i)
     {
-        for (y = 0; y < COLS; y++)
-        {
-            if (scanf("%d", &numbers[x][y]) != 1)
-            {
-                printf("\nCould not read integer.\n");
-                return 1;
-            }
-        }
+        sem_init(&semaphores[i], 0, i == 0 ? 1 : 0);
     }
 
-    // Print the original array
-    printf("Original Array:\n");
-    for (x = 0; x < ROWS; x++)
+    for (int i = 0; i < N; ++i)
     {
-        for (y = 0; y < COLS; y++)
-        {
-            printf("%d ", numbers[x][y]);
-        }
-        printf("\n");
+        int *arg = (int *)malloc(sizeof(int));
+        *arg = i;
+        pthread_create(&threads[i], NULL, shearsort, arg);
     }
-    printf("\n");
 
-    // Print the sorted array
-    printf("Sorted Array:\n ");
-    for (i = 0; i < ROWS; i++)
+    for (int i = 0; i < N; ++i)
     {
-        for (y = 0; y < COLS; y++)
-        {
-            printf("%d ", msg.numbers[i][y]);
-        }
-        printf("\n");
+        pthread_join(threads[i], NULL);
     }
+
+    printf("Sorted array:\n");
+    print_array();
+
+    for (int i = 0; i < N; ++i)
+    {
+        sem_destroy(&semaphores[i]);
+    }
+
+    return 0;
 }
